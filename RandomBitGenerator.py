@@ -8,23 +8,48 @@ def set_read_mode(binary, sub_mode):
     """Set the first 3 bits to '010' for Move in Memory or '011' for Move in Registry."""
     return sub_mode + binary[3:]
 
-def set_alu_mode(binary, alu_operation):
-    """Set the first 3 bits to '100' for ALU mode, and insert the operation in bits 11-14."""
-    return '100' + binary[3:10] + alu_operation + binary[15:32]
+def set_alu_mode(binary, funct3, funct7):
+    """
+    Set the RISC-V ALU mode.
+    - First 3 bits '100' for ALU instructions.
+    - Insert funct3 (3 bits) and funct7 (7 bits) for ALU operations.
+    """
+    return '100' + binary[3:10] + funct3.zfill(3) + binary[13:25] + funct7.zfill(7)
 
-def generate_32bit_binaries(count, mode, sub_mode=None, alu_operation=None):
+def random_alu_operation():
+    """
+    Selects a random ALU operation and returns the corresponding funct3 and funct7 values.
+    """
+    operation_map = [
+        ('000', '0000000'),  # Addition
+        ('000', '0100000'),  # Subtraction
+        ('001', '0000000'),  # Multiplication
+        ('001', '0100000'),  # Division
+        ('111', '0000000'),  # AND
+        ('110', '0000000'),  # OR
+        ('100', '0000000'),  # XOR
+        ('101', '0000000')   # NOT
+    ]
+    return random.choice(operation_map)
+
+def generate_32bit_binaries(count, mode, sub_mode=None):
+    """
+    Generate 32-bit binary instructions based on mode.
+    Supports RISC-V-like encoding for ALU, memory, and registry instructions.
+    """
     binaries = []
     for _ in range(count):
-        # Generate a random 32-bit integer and convert it to a binary string with padding to 32 bits
+        # Generate a random 32-bit integer and convert it to binary string with padding to 32 bits
         binary_number = f'{random.getrandbits(32):032b}'
         
-        # Set mode based on user input: write/read/alu
+        # Set mode based on user input
         if mode == 'write':
             binary_number = set_write_mode(binary_number, sub_mode)
         elif mode == 'read':
             binary_number = set_read_mode(binary_number, sub_mode)
         elif mode == 'alu':
-            binary_number = set_alu_mode(binary_number, alu_operation)
+            funct3, funct7 = random_alu_operation()  # Randomly select ALU operation
+            binary_number = set_alu_mode(binary_number, funct3, funct7)
         
         binaries.append(binary_number)
     return binaries
@@ -35,39 +60,8 @@ def save_to_file(binaries, filename="bits.txt"):
         for binary in binaries:
             file.write(f"{binary}\n")
 
-def choose_alu_operation():
-    """Prompt the user to choose an ALU operation and return the corresponding 4-bit binary."""
-    print("Choose an ALU operation:")
-    print("0: Addition")
-    print("1: Subtraction")
-    print("2: Multiplication")
-    print("3: Division")
-    print("4: AND")
-    print("5: OR")
-    print("6: XOR")
-    print("7: NOT")
-    
-    choice = input("Enter the number of the ALU operation (0-7): ").strip()
-    
-    operation_map = {
-        '0': '0000',  # Addition
-        '1': '0001',  # Subtraction
-        '2': '0010',  # Multiplication
-        '3': '0011',  # Division
-        '4': '0100',  # AND
-        '5': '0101',  # OR
-        '6': '0110',  # XOR
-        '7': '0111'   # NOT
-    }
-    
-    if choice in operation_map:
-        return operation_map[choice]
-    else:
-        print("Invalid operation. Defaulting to Addition (0000).")
-        return '0000'  # Default to addition if invalid input
-
 def main():
-    """Main function to handle user input and generate the appropriate 32-bit binaries."""
+    """Main function to handle user input and generate appropriate 32-bit binaries."""
     try:
         # Input for number of write instructions
         write_mem_count = int(input("Enter the number of write to memory instructions: "))
@@ -98,10 +92,9 @@ def main():
         if read_reg_count > 0:
             binaries += generate_32bit_binaries(read_reg_count, mode='read', sub_mode='011')
         
-        # Generate ALU instructions
+        # Generate ALU instructions with random operations
         if alu_count > 0:
-            alu_operation = choose_alu_operation()  # Ask user to choose ALU operation
-            binaries += generate_32bit_binaries(alu_count, mode='alu', alu_operation=alu_operation)
+            binaries += generate_32bit_binaries(alu_count, mode='alu')
         
         # Check if at least one instruction was provided
         if not binaries:
