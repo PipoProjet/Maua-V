@@ -2,6 +2,7 @@ from myhdl import block, Signal, always_comb, Simulation, delay, traceSignals, i
 from random import randrange
 
 bits = []
+aux = 0
 with open('bits.txt','r') as file:
    for linha in file:
        bits.append(linha.strip())
@@ -51,6 +52,41 @@ def or_gate(a, b, out):
     @always_comb 
     def logic():
         out.next = a | b
+    return logic
+
+@block
+def nand_gate(a, b, out):
+    @always_comb
+    def logic():    
+        out.next = ~(a & b)
+    return logic
+
+@block 
+def nor_gate(a, b, out):
+    @always_comb 
+    def logic():
+        out.next = ~(a | b)
+    return logic
+
+@block 
+def xor_gate(a, b, out):
+    @always_comb 
+    def logic():
+        out.next = a ^ b
+    return logic
+
+@block 
+def xnor_gate(a, b, out):
+    @always_comb 
+    def logic():
+        out.next = ~(a ^ b)
+    return logic
+
+@block 
+def not_gate(a, out):
+    @always_comb 
+    def logic():
+        out.next = ~(a)
     return logic
 
 @block 
@@ -105,10 +141,10 @@ def system():
     write_enable = Signal(bool(0))
     clk = Signal(bool(0))
 
-    operation = Signal(intbv(0)[4:])
+    operation = Signal(intbv(0)[5:])
     num1 = Signal(intbv(0)[8:])
     num2 = Signal(intbv(0)[8:])
-    result = Signal(intbv(0)[10:])
+    result = Signal(intbv(0)[14:])
     
     reg_write = Signal(0)
     regWrite_addr = Signal(intbv(0)[5:])
@@ -130,41 +166,133 @@ def system():
             if len(linha) < 32:
                 raise ValueError("Todas as intruções tem que ter no mínimo 32 bits")
         while(len(bits) > 0):
-            print(int(bits[0][0:2],2))
-          
-            if(int(bits[0][0:2],2) == 0):
+            print(int(bits[0][0:3],2))
+            
+            #Write in Memory
+            if(int(bits[0][0:3],2) == 0):
                 yield clk.posedge
                 write_enable.next = True
-                addr.next = intbv(int(bits[0][3:10],2))
+                addr.next = intbv(int(bits[0][4:11],2))
                 yield clk.posedge
-                data_in.next = intbv(int(bits[0][11:18],2))              
+                data_in.next = intbv(int(bits[0][12:19],2))     
+           
+            #Write in Registers
+            if(int(bits[0][0:3],2) == 1):
+                yield clk.posedge
+                reg_write.next = True
+                regWrite_addr.next = intbv(int(bits[0][4:8],2))
+                yield clk.posedge
+                write_data.next = intbv(int(bits[0][9:16],2))        
             
-            if(int(bits[0][0:2],2) == 1):
+            #Do Func
+            if(int(bits[0][0:3],2) == 2):
                 yield clk.posedge
-                write_enable.next = False
-                regRead_addr.next = intbv(int(bits[0][3:10],2))
+                reg_write.next = False
+                regWrite_addr.next = intbv(int(bits[0][4:8],2))
                 yield clk.posedge
                 num1.next = data_out
-                operation.next = intbv(int(bits[0][11:14],2))
+                operation.next = intbv(int(bits[0][9:13],2))
                 yield clk.posedge 
-                regRead_addr.next = intbv(int(bits[0][15:22],2))
+                regWrite_addr.next = intbv(int(bits[0][13:18],2))
                 yield clk.posedge
                 num2.next = data_out
-                yield clk.posedges
-                regRead_addr.next = intbv(int(bits[0][23:32],2))
+                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][18:32],2))
                 yield clk.posedge
                 reg_write.next = True
                 write_data.next = result
-                
+            
+            #Move in memory
+            if(int(bits[0][0:3],2) == 3):
+                yield clk.posedge 
+                write_enable.next = False
+                addr.next = intbv(int(bits[0][20:27],2))
+                yield clk.posedge
+                write_enable.next = True
+                data_in.next = data_out
+                addr.next = intbv(int(bits[0][12:19],2))
+                yield clk.posedge
+                write_enable.next = False
+                addr.next = intbv(int(bits[0][4:11],2))
+                aux = data_out
+                yield clk.posedge
+                write_enable.next = True
+                addr.next = intbv(int(bits[0][20:27],2))
+                data_in.next = aux
+                yield clk.posedge
+                write_enable.next = False
+                addr.next = intbv(int(bits[0][12:19],2))
+                aux = data_out
+                yield clk.posedge
+                addr.next = intbv(int(bits[0][4:11],2))
+                write_enable.next = True
+                data_in.next = aux
+            
+            #Move in registers
+            if(int(bits[0][0:3],2) == 4):
+                yield clk.posedge 
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][14:18],2))
+                yield clk.posedge
+                reg_write.next = True
+                write_data.next = read_data
+                addr.next = intbv(int(bits[0][9:13],2))
+                yield clk.posedge
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][4:8],2))
+                aux = read_data
+                yield clk.posedge
+                reg_write.next = True
+                regWrite_addr.next = intbv(int(bits[0][14:18],2))
+                write_data.next = aux
+                yield clk.posedge
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][9:13],2))
+                aux = read_data
+                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][4:8],2))
+                reg_write.next = True
+                write_data.next = aux
+            
+            #Write Registers to Memory
+            if(int(bits[0][3:0],2) == 5):
+                yield clk.posedge
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][4:8],2))
+                yield clk.posedge
+                write_enable.next = True
+                addr.next = intbv(int(bits[0][9:16],2))
+                data_in.next = read_data
+            
+            #Write Memory to Register
+            if(int(bits[0][3:0],2) == 6):
+                yield clk.posedge
+                write_enable.next = False
+                addr.next = intbv(int(bits[0][4:11],2))
+                yield clk.posedge
+                reg_write.next = True
+                regWrite_addr.next = intbv(int(bits[0][12:16],2))
+                write_data.next = data_out
+                               
             del(bits[0])
             yield clk.posedge
         yield clk.posedge
+        
         write_enable.next = False
+        reg_write.next = False
+        
+        print("\nConteúdo dos Registradores:")
+        for i in range(16):  # mem_size = 16
+            regRead_addr.next = i
+            yield clk.posedge  # Sincroniza com o clock para garantir a leitura correta
+            print(f"Registrador {i:04b}: {read_data}")
+        
         print("\nConteúdo da Memória:")
         for i in range(16):  # mem_size = 16
             addr.next = i
             yield clk.posedge  # Sincroniza com o clock para garantir a leitura correta
             print(f"Endereço {i:04b}: {data_out}")
+            
     return clkgen, UC,memory_inst, alu_inst, register_inst
 
 if __name__ == "__main__":
