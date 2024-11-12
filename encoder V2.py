@@ -54,8 +54,11 @@ while(True):
     if(tipo == 7):
        addr1 = int(input("Digite o endereço da memória de base: "))
        addr2 = int(input("Digite o endereço do registrador de destino: "))
-       linhas.append('100'+str(format(addr1, 'b').zfill(8))+str(format(addr2, 'b').zfill(5))+'0000000000000000\n')
-    if(tipo ==8):
+       linhas.append('110'+str(format(addr1, 'b').zfill(8))+str(format(addr2, 'b').zfill(5))+'0000000000000000\n')
+    if(tipo == 8):
+        addr1 = int(input("Digite o endereço do registrador que deseja limpar: "))
+        linhas.append('111'+str(format(addr1, 'b').zfill(5))+'000000000000000000000\n')
+    if(tipo ==9):
         break
     print(linhas)
 with open("bits.txt", "w") as arquivo:

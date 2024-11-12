@@ -2,7 +2,7 @@ from myhdl import block, Signal, always_comb, Simulation, delay, traceSignals, i
 from random import randrange
 
 bits = []
-aux = 0
+
 with open('bits.txt','r') as file:
    for linha in file:
        bits.append(linha.strip())
@@ -20,14 +20,13 @@ def register(clk, reg_write, regWrite_addr, regRead_addr, write_data, read_data)
     
     @always_comb
     def read_regs():
-        if(reg_write == False):
-            read_data.next = regs[regRead_addr]
+        read_data.next = regs[regRead_addr]
     return write_regs,read_regs
         
 
 @block 
 def memory(clk, addr, data_in, data_out, write_enable):
-    mem_size = 16
+    mem_size = 256
     mem = [Signal(intbv(0)[10:]) for i in range(mem_size)]
     
     @always(clk.posedge)
@@ -39,55 +38,6 @@ def memory(clk, addr, data_in, data_out, write_enable):
         if write_enable == 0:
             data_out.next = mem[addr]
     return write, read
-
-@block
-def and_gate(a, b, out):
-    @always_comb
-    def logic():    
-        out.next = a & b
-    return logic
-
-@block 
-def or_gate(a, b, out):
-    @always_comb 
-    def logic():
-        out.next = a | b
-    return logic
-
-@block
-def nand_gate(a, b, out):
-    @always_comb
-    def logic():    
-        out.next = ~(a & b)
-    return logic
-
-@block 
-def nor_gate(a, b, out):
-    @always_comb 
-    def logic():
-        out.next = ~(a | b)
-    return logic
-
-@block 
-def xor_gate(a, b, out):
-    @always_comb 
-    def logic():
-        out.next = a ^ b
-    return logic
-
-@block 
-def xnor_gate(a, b, out):
-    @always_comb 
-    def logic():
-        out.next = ~(a ^ b)
-    return logic
-
-@block 
-def not_gate(a, out):
-    @always_comb 
-    def logic():
-        out.next = ~(a)
-    return logic
 
 @block 
 def mux(bit,clk,out,addr):
@@ -102,35 +52,40 @@ def ALU(operation,num1,num2,result,clk):
     out = Signal(0)
     bit = Signal(intbv(0)[8:])
     addr = Signal(intbv(0)[3:])
-    
-    a = Signal(0)
-    b = Signal(0)
-    c = Signal(0)
-    d = Signal(0)
-    outOR = Signal(0)
-    outAND = Signal(0)
-    
-    and_inst = and_gate(a,b,outAND)
-    or_inst = or_gate(c,d,outOR)
+
     mux_inst = mux(bit, clk, out, addr)
     
     
     @always(clk.posedge)
     def alu_logic():
         if(operation == 0):
-            result.next = num1 + num2   
-        if(operation == 1):
+            result.next = num1 + num2
+        elif(operation == 1):
             result.next = num1 - num2
-        if(operation == 2):
+        elif(operation == 2):
             result.next = num1 * num2
-        if(operation == 3):
+        elif(operation == 3):
             result.next = num1 / num2 
-        if(operation == 4):
+        elif(operation == 4):
             result.next = num1 ** num2
-        if(operation == 5):
+        elif(operation == 5):
             result.next = num1 % num2
+        elif(operation == 6):
+            result.next = num1 & num2
+        elif(operation == 7):
+            result.next = num1 | num2
+        elif(operation == 8):
+            result.next = ~(num1 & num2)
+        elif(operation == 9):
+            result.next = ~(num1 | num2)
+        elif(operation == 10):
+            result.next = num1 ^ num2
+        elif(operation == 11):
+            result.next = ~(num1 ^ num2)
+        elif(operation == 12):
+            result.next = ~(num1)
       
-    return alu_logic, and_inst, mux_inst, or_inst
+    return alu_logic,mux_inst
 
 @block
 def system():
@@ -152,6 +107,9 @@ def system():
     write_data = Signal(intbv(0)[8:])
     read_data = Signal(intbv(0)[8:])
     
+    aux = Signal(intbv(0)[8:])
+    aux1 = Signal(intbv(0)[8:])
+    
     alu_inst = ALU(operation, num1,num2,result,clk)
     memory_inst = memory(clk, addr, data_in,data_out, write_enable)
     register_inst = register(clk, reg_write, regWrite_addr, regRead_addr, write_data, read_data)
@@ -165,8 +123,7 @@ def system():
         for linha in bits:
             if len(linha) < 32:
                 raise ValueError("Todas as intruções tem que ter no mínimo 32 bits")
-        while(len(bits) > 0):
-            print(int(bits[0][0:3],2))
+        while(len(bits) > 0):            
             
             #Write in Memory
             if(int(bits[0][0:3],2) == 0):
@@ -186,93 +143,136 @@ def system():
             
             #Do Func
             if(int(bits[0][0:3],2) == 2):
+      
                 yield clk.posedge
                 reg_write.next = False
-                regWrite_addr.next = intbv(int(bits[0][4:8],2))
+                regRead_addr.next = intbv(int(bits[0][4:8], 2)) 
+                yield clk.posedge  
+                num1.next = read_data
                 yield clk.posedge
-                num1.next = data_out
-                operation.next = intbv(int(bits[0][9:13],2))
+                regRead_addr.next = intbv(int(bits[0][14:18], 2))  
+                yield clk.posedge  
+                num2.next = read_data
+                yield clk.posedge
+                operation.next = intbv(int(bits[0][9:13], 2))
                 yield clk.posedge 
-                regWrite_addr.next = intbv(int(bits[0][13:18],2))
-                yield clk.posedge
-                num2.next = data_out
-                yield clk.posedge
-                regWrite_addr.next = intbv(int(bits[0][18:32],2))
-                yield clk.posedge
                 reg_write.next = True
+                regWrite_addr.next = intbv(int(bits[0][19:23], 2)) 
+                yield clk.posedge 
                 write_data.next = result
-            
+                
             #Move in memory
             if(int(bits[0][0:3],2) == 3):
+                
                 yield clk.posedge 
                 write_enable.next = False
-                addr.next = intbv(int(bits[0][20:27],2))
+                addr.next = intbv(int(bits[0][9:13],2))
                 yield clk.posedge
-                write_enable.next = True
-                data_in.next = data_out
-                addr.next = intbv(int(bits[0][12:19],2))
-                yield clk.posedge
+                aux1.next = data_out
+                yield clk.posedge 
                 write_enable.next = False
-                addr.next = intbv(int(bits[0][4:11],2))
-                aux = data_out
+                addr.next = intbv(int(bits[0][4:8],2))
                 yield clk.posedge
+                aux.next = data_out
+                yield clk.posedge
+                addr.next = intbv(int(bits[0][9:13],2))
                 write_enable.next = True
-                addr.next = intbv(int(bits[0][20:27],2))
                 data_in.next = aux
                 yield clk.posedge
                 write_enable.next = False
-                addr.next = intbv(int(bits[0][12:19],2))
-                aux = data_out
+                addr.next = intbv(int(bits[0][14:18],2))
                 yield clk.posedge
-                addr.next = intbv(int(bits[0][4:11],2))
+                aux.next = data_out
+                yield clk.posedge
+                addr.next = intbv(int(bits[0][4:8],2))
                 write_enable.next = True
                 data_in.next = aux
+                yield clk.posedge
+                write_enable.next = False
+                addr.next = intbv(int(bits[0][9:13],2))
+                yield clk.posedge
+                aux.next = data_out
+                yield clk.posedge
+                addr.next = intbv(int(bits[0][14:18],2))
+                write_enable.next = True
+                data_in.next = aux
+                yield clk.posedge
+                addr.next = intbv(int(bits[0][9:13],2))
+                write_enable.next = True
+                data_in.next = aux1
             
             #Move in registers
             if(int(bits[0][0:3],2) == 4):
+                
                 yield clk.posedge 
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][9:13],2))
+                yield clk.posedge
+                aux1.next = read_data
+                yield clk.posedge 
+                reg_write.next = False
+                regRead_addr.next = intbv(int(bits[0][4:8],2))
+                yield clk.posedge
+                aux.next = read_data
+                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][9:13],2))
+                reg_write.next = True
+                write_data.next = aux
+                yield clk.posedge
                 reg_write.next = False
                 regRead_addr.next = intbv(int(bits[0][14:18],2))
                 yield clk.posedge
-                reg_write.next = True
-                write_data.next = read_data
-                addr.next = intbv(int(bits[0][9:13],2))
+                aux.next = read_data
                 yield clk.posedge
-                reg_write.next = False
-                regRead_addr.next = intbv(int(bits[0][4:8],2))
-                aux = read_data
-                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][4:8],2))
                 reg_write.next = True
-                regWrite_addr.next = intbv(int(bits[0][14:18],2))
                 write_data.next = aux
                 yield clk.posedge
                 reg_write.next = False
                 regRead_addr.next = intbv(int(bits[0][9:13],2))
-                aux = read_data
                 yield clk.posedge
-                regWrite_addr.next = intbv(int(bits[0][4:8],2))
+                aux.next = read_data
+                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][14:18],2))
                 reg_write.next = True
                 write_data.next = aux
-            
-            #Write Registers to Memory
-            if(int(bits[0][3:0],2) == 5):
+                yield clk.posedge
+                regWrite_addr.next = intbv(int(bits[0][9:13],2))
+                reg_write.next = True
+                write_data.next = aux1
+                
+            #Move Registers to Memory
+            if(int(bits[0][0:3],2) == 5):
+        
                 yield clk.posedge
                 reg_write.next = False
                 regRead_addr.next = intbv(int(bits[0][4:8],2))
                 yield clk.posedge
                 write_enable.next = True
                 addr.next = intbv(int(bits[0][9:16],2))
+                yield clk.posedge
                 data_in.next = read_data
             
-            #Write Memory to Register
-            if(int(bits[0][3:0],2) == 6):
+            #Move Memory to Register
+            if(int(bits[0][0:3],2) == 6):
+                
                 yield clk.posedge
                 write_enable.next = False
                 addr.next = intbv(int(bits[0][4:11],2))
                 yield clk.posedge
                 reg_write.next = True
                 regWrite_addr.next = intbv(int(bits[0][12:16],2))
+                yield clk.posedge
                 write_data.next = data_out
+            
+            #Remove Register
+            if(int(bits[0][0:3],2) == 7):
+                
+                yield clk.posedge
+                reg_write.next = True
+                regWrite_addr.next = intbv(int(bits[0][4:8],2))
+                yield clk.posedge
+                write_data.next = 0
                                
             del(bits[0])
             yield clk.posedge
@@ -282,18 +282,18 @@ def system():
         reg_write.next = False
         
         print("\nConteúdo dos Registradores:")
-        for i in range(16):  # mem_size = 16
+        for i in range(32):  
             regRead_addr.next = i
-            yield clk.posedge  # Sincroniza com o clock para garantir a leitura correta
+            yield clk.posedge  
             print(f"Registrador {i:04b}: {read_data}")
         
         print("\nConteúdo da Memória:")
-        for i in range(16):  # mem_size = 16
+        for i in range(16):  
             addr.next = i
-            yield clk.posedge  # Sincroniza com o clock para garantir a leitura correta
+            yield clk.posedge  
             print(f"Endereço {i:04b}: {data_out}")
             
-    return clkgen, UC,memory_inst, alu_inst, register_inst
+    return clkgen, UC, memory_inst, alu_inst, register_inst
 
 if __name__ == "__main__":
     # Cria os arquivos para simular no gtkwave
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     tb.config_sim(trace=True)
     print("Iniciou a simulação")
     try:
-        tb.run_sim(1200)
+        tb.run_sim(5000)
     finally:
         print("Terminou a simulação")
         tb.quit_sim()
